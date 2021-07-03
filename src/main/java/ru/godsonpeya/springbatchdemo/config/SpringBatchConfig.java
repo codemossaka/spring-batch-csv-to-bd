@@ -1,6 +1,5 @@
 package ru.godsonpeya.springbatchdemo.config;
 
-import lombok.AllArgsConstructor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
@@ -15,12 +14,18 @@ import org.springframework.batch.item.file.LineMapper;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
+import org.springframework.batch.item.support.CompositeItemProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
+import ru.godsonpeya.springbatchdemo.batch.BankTransactionItemAnalyticsProcessor;
+import ru.godsonpeya.springbatchdemo.batch.BankTransactionItemProcessor;
 import ru.godsonpeya.springbatchdemo.entity.BankTransaction;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Configuration
 @EnableBatchProcessing
@@ -37,9 +42,6 @@ public class SpringBatchConfig {
     @Autowired
     private ItemWriter<BankTransaction> bankTransactionItemWriter;
 
-    @Autowired
-    private ItemProcessor<BankTransaction, BankTransaction> itemProcessor;
-
 
     @Bean
     public Job myJob() {
@@ -47,12 +49,32 @@ public class SpringBatchConfig {
                 .<BankTransaction, BankTransaction>chunk(100)
                 .reader(bankTransactionItemReader)
                 .writer(bankTransactionItemWriter)
-                .processor(itemProcessor)
+                .processor(compositeItemProcessors())
                 .build();
         return jobBuilderFactory.get("ETL-Load")
                 .incrementer(new RunIdIncrementer())
                 .start(step)
                 .build();
+    }
+
+    @Bean
+    public ItemProcessor<? super BankTransaction, ? extends BankTransaction> compositeItemProcessors() {
+        List<ItemProcessor<BankTransaction, BankTransaction>> itemProcessors = new ArrayList<>();
+        itemProcessors.add(bankTransactionItemProcessor());
+        itemProcessors.add(bankTransactionItemAnalyticsProcessor());
+        CompositeItemProcessor<BankTransaction,BankTransaction> compositeItemProcessor=new CompositeItemProcessor<>();
+        compositeItemProcessor.setDelegates(itemProcessors);
+        return compositeItemProcessor;
+    }
+
+    @Bean
+    public BankTransactionItemAnalyticsProcessor bankTransactionItemAnalyticsProcessor() {
+        return new BankTransactionItemAnalyticsProcessor();
+    }
+
+    @Bean
+    public BankTransactionItemProcessor bankTransactionItemProcessor() {
+        return new BankTransactionItemProcessor();
     }
 
     @Bean
